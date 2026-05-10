@@ -110,17 +110,23 @@
             border-bottom-width: 0px;
             margin-bottom: 4px;
         }
+        @keyframes flicker { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .flicker { animation: flicker 0.9s ease-in-out infinite; }
+        .skeleton-shimmer {
+            background: linear-gradient(90deg, #1c1b1b 0%, #2a2a2a 50%, #1c1b1b 100%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+        }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
     </style>
 <style>
     body {
       min-height: max(884px, 100dvh);
     }
   </style>
-  </head>
+</head>
 <body class="bg-background text-on-background font-body-md min-h-screen relative pb-24 overflow-x-hidden">
-<!-- Global CRT Overlay -->
 <div class="fixed inset-0 crt-scanlines z-50 pointer-events-none opacity-40"></div>
-<!-- Header -->
 <header class="w-full bg-surface-container-high border-b-2 border-outline sticky top-0 z-40">
 <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-3 flex flex-col gap-1">
 <div class="flex justify-between items-center">
@@ -131,198 +137,113 @@
 </div>
 </header>
 <main class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-margin-desktop flex flex-col gap-gutter">
-<!-- OSD Status Bar -->
 <div class="flex justify-between items-center bg-surface-container-lowest p-2 border-2 border-surface-variant">
 <span class="font-label-mono text-tertiary uppercase tracking-widest flex items-center gap-2">
 <span class="material-symbols-outlined text-[16px]">fiber_manual_record</span>
-                WATCHLIST: 312 ENTRIES
-            </span>
-<span class="font-label-mono text-on-surface uppercase opacity-50">@DEMO_VHS</span>
+<span id="watchlist-status">WATCHLIST: SYNC REQUIRED</span>
+</span>
+<span id="user-handle" class="font-label-mono text-on-surface uppercase opacity-50">@NO_USER</span>
 </div>
-<!-- Selections Panel -->
 <section class="bg-surface-container border-2 border-outline relative mt-gutter">
 <div class="absolute -top-3 left-4 bg-on-surface text-surface px-2 py-0.5 font-label-mono uppercase flex items-center gap-2">
 <span class="material-symbols-outlined text-[14px]">tune</span>
-                Make a Selection
-            </div>
+Make a Selection
+</div>
 <div class="p-6 pt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-<!-- MOOD -->
 <div class="flex flex-col gap-3">
 <label class="font-label-mono uppercase font-bold text-on-surface-variant flex items-center gap-2">
 <span class="w-2 h-2 bg-secondary-container inline-block"></span>
-                        Mood
-                    </label>
-<div class="flex flex-wrap gap-2">
+Mood
+</label>
+<div class="flex flex-wrap gap-2" data-filter-group="mood">
 <div>
-<input class="chip-input sr-only" id="mood-chill" name="mood" type="checkbox"/>
+<input class="chip-input sr-only" id="mood-chill" name="mood" type="checkbox" value="chill"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="mood-chill">Chill</label>
 </div>
 <div>
-<input checked="" class="chip-input sr-only" id="mood-intense" name="mood" type="checkbox"/>
+<input class="chip-input sr-only" id="mood-intense" name="mood" type="checkbox" value="intense"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="mood-intense">Intense</label>
 </div>
 <div>
-<input checked="" class="chip-input sr-only" id="mood-atmos" name="mood" type="checkbox"/>
+<input class="chip-input sr-only" id="mood-atmos" name="mood" type="checkbox" value="atmospheric"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="mood-atmos">Atmospheric</label>
 </div>
 <div>
-<input class="chip-input sr-only" id="mood-funny" name="mood" type="checkbox"/>
+<input class="chip-input sr-only" id="mood-funny" name="mood" type="checkbox" value="funny"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="mood-funny">Funny</label>
 </div>
 </div>
 </div>
-<!-- RUNTIME -->
 <div class="flex flex-col gap-3">
 <label class="font-label-mono uppercase font-bold text-on-surface-variant flex items-center gap-2">
 <span class="w-2 h-2 bg-primary-container inline-block"></span>
-                        Runtime
-                    </label>
-<div class="flex flex-wrap gap-2">
+Runtime
+</label>
+<div class="flex flex-wrap gap-2" data-filter-group="runtime">
 <div>
-<input class="chip-input sr-only" id="rt-short" name="runtime" type="checkbox"/>
+<input class="chip-input sr-only" id="rt-short" name="runtime" type="checkbox" value="short"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-short">Short &lt;90</label>
 </div>
 <div>
-<input checked="" class="chip-input sr-only" id="rt-med" name="runtime" type="checkbox"/>
+<input class="chip-input sr-only" id="rt-med" name="runtime" type="checkbox" value="medium"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-med">Medium 90-120</label>
 </div>
 <div>
-<input class="chip-input sr-only" id="rt-long" name="runtime" type="checkbox"/>
+<input class="chip-input sr-only" id="rt-long" name="runtime" type="checkbox" value="long"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-long">Long &gt;120</label>
 </div>
 </div>
 </div>
-<!-- DECADE -->
 <div class="flex flex-col gap-3">
 <label class="font-label-mono uppercase font-bold text-on-surface-variant flex items-center gap-2">
 <span class="w-2 h-2 bg-tertiary inline-block"></span>
-                        Decade
-                    </label>
-<div class="flex flex-wrap gap-2">
+Decade
+</label>
+<div class="flex flex-wrap gap-2" data-filter-group="decade">
 <div>
-<input class="chip-input sr-only" id="dc-80" name="decade" type="checkbox"/>
+<input class="chip-input sr-only" id="dc-70" name="decade" type="checkbox" value="70s"/>
+<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-70">70s</label>
+</div>
+<div>
+<input class="chip-input sr-only" id="dc-80" name="decade" type="checkbox" value="80s"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-80">80s</label>
 </div>
 <div>
-<input checked="" class="chip-input sr-only" id="dc-90" name="decade" type="checkbox"/>
+<input class="chip-input sr-only" id="dc-90" name="decade" type="checkbox" value="90s"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-90">90s</label>
 </div>
 <div>
-<input class="chip-input sr-only" id="dc-00" name="decade" type="checkbox"/>
+<input class="chip-input sr-only" id="dc-00" name="decade" type="checkbox" value="00s"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-00">2000s</label>
 </div>
 <div>
-<input class="chip-input sr-only" id="dc-10" name="decade" type="checkbox"/>
+<input class="chip-input sr-only" id="dc-10" name="decade" type="checkbox" value="10s+"/>
 <label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-10">2010s+</label>
 </div>
 </div>
 </div>
 </div>
 <div class="border-t-2 border-outline-variant px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-<p class="font-label-mono text-on-surface-variant text-[11px] uppercase tracking-widest">// FILTERS APPLIED TO YOUR LETTERBOXD WATCHLIST</p>
-<button class="bg-primary-container hover:bg-inverse-primary text-on-primary-container font-headline-md uppercase py-3 px-6 border-b-4 border-on-primary-fixed-variant btn-brutal flex items-center justify-center gap-2 transition-all">
+<p id="filter-summary" class="font-label-mono text-on-surface-variant text-[11px] uppercase tracking-widest">// NO FILTERS APPLIED — ANY FILM ELIGIBLE</p>
+<button id="pick-btn" class="bg-primary-container hover:bg-inverse-primary text-on-primary-container font-headline-md uppercase py-3 px-6 border-b-4 border-on-primary-fixed-variant btn-brutal flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">refresh</span>
-                    Pick from Shelf
-                </button>
+Pick from Shelf
+</button>
 </div>
 </section>
-<!-- Watchlist Picks -->
 <section class="flex flex-col gap-gutter mt-gutter">
 <h2 class="font-headline-md text-tertiary uppercase flex items-center gap-unit bg-surface-container px-2 py-1 w-fit border border-tertiary/30">
 <span class="material-symbols-outlined">library_books</span>
-                From Your Watchlist
-            </h2>
-<p class="font-label-mono text-on-surface-variant uppercase text-[11px] tracking-widest -mt-2">// 4 OF 312 ENTRIES MATCH SELECTION</p>
-<!-- VHS Grid -->
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter mt-unit">
-<!-- Card 1 -->
-<article class="relative flex flex-col bg-surface-container-lowest border-2 border-secondary-container p-unit group">
-<div class="relative w-full aspect-[2/3] bg-background border-2 border-surface-variant overflow-hidden">
-<img alt="Heat" class="w-full h-full object-cover grayscale contrast-125 brightness-75 sepia-[.2] group-hover:sepia-0 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4UPE3sZAJmyWwxQMZTAA1mLXVHDa_E-5WVFSELlFPLYxRtzrm3II_aihlNHX4LeBjB3t5B9liA2d5t-lQxQ-5w0SlXamXHuT5lg_m0YlX5efP3EHsYOhWGMvjMSlDAxATI-lsYa1cWlt-F7PfAsaTX3FXTqklzErR73YmLT7eJziNix9vC5aHLmj0WktA7IFtaNCndMk7lJREo1FVDQcdcl9TxvoyL2K2Ie9a0QlwTgTTAEgHHmGAVlW4dpFtgtY5BRe0qM38evg"/>
-<div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none"></div>
-<div class="absolute top-3 -right-2 bg-secondary-container text-on-primary-container font-label-mono px-3 py-1 rotate-[3deg] border-2 border-surface-container-lowest shadow-[4px_4px_0px_rgba(0,0,0,1)] uppercase">
-                            Watchlist
-                        </div>
+From Your Watchlist
+</h2>
+<p id="match-count" class="font-label-mono text-on-surface-variant uppercase text-[11px] tracking-widest -mt-2">// PRESS PICK FROM SHELF TO LOAD</p>
+<div id="cards-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter mt-unit">
+<div class="bg-surface-container-lowest border-2 border-outline-variant border-dashed p-6 col-span-full text-center">
+<p class="font-label-mono text-on-surface-variant uppercase tracking-widest">// NO PICKS YET. SET YOUR FILTERS AND HIT THE BIG RED BUTTON.</p>
 </div>
-<div class="flex-1 flex flex-col gap-2 pt-3 px-1">
-<h3 class="font-headline-md uppercase text-on-surface truncate" title="Heat">Heat</h3>
-<div class="font-label-mono text-secondary uppercase text-[10px] tracking-widest flex items-center gap-1">
-<span class="material-symbols-outlined text-[14px]">videocam</span> CRIME / DRA / 1995
-                    </div>
-<div class="font-label-mono text-tertiary uppercase text-[10px] tracking-widest">// INTENSE · 170 MIN · 90s</div>
-<button class="mt-auto w-full bg-primary-container text-on-primary-container font-headline-md text-lg py-3 border-b-[6px] border-on-primary-fixed-variant uppercase btn-brutal flex justify-center items-center gap-2 transition-all">
-                        Watch
-                        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
-</button>
-</div>
-</article>
-<!-- Card 2 -->
-<article class="relative flex flex-col bg-surface-container-lowest border-2 border-secondary-container p-unit group">
-<div class="relative w-full aspect-[2/3] bg-background border-2 border-surface-variant overflow-hidden">
-<img alt="Lost Highway" class="w-full h-full object-cover grayscale contrast-125 brightness-75 sepia-[.2] group-hover:sepia-0 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuANTAlT3P1g8k96FO6KHavjKFGnMM09ArQGHMnogv2R0D7P0addMYdoDkaz6EYDO5gkbxybjupPyBhV43G2ITwoV20MrKRPxpJKudu5tZwobTt1KJGfH38_UbheIEfx-SMraEfVJT6STRQUNVqjvyI0DzRSU22uDTVVFCSy-ArIhzqakzzR2uGnzIdk9hE5FLEmcnI3C2eQR5I0hf8Wt7kftDblOxRpRWHkTlOuPGK3H00Nyqwg9Gj1a5FzzqDZo0oddfd2jsQcAQs"/>
-<div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none"></div>
-<div class="absolute top-3 -right-2 bg-secondary-container text-on-primary-container font-label-mono px-3 py-1 rotate-[-2deg] border-2 border-surface-container-lowest shadow-[4px_4px_0px_rgba(0,0,0,1)] uppercase">
-                            Watchlist
-                        </div>
-</div>
-<div class="flex-1 flex flex-col gap-2 pt-3 px-1">
-<h3 class="font-headline-md uppercase text-on-surface truncate" title="Lost Highway">Lost Highway</h3>
-<div class="font-label-mono text-secondary uppercase text-[10px] tracking-widest flex items-center gap-1">
-<span class="material-symbols-outlined text-[14px]">videocam</span> NOIR / MYS / 1997
-                    </div>
-<div class="font-label-mono text-tertiary uppercase text-[10px] tracking-widest">// ATMOSPHERIC · 134 MIN · 90s</div>
-<button class="mt-auto w-full bg-primary-container text-on-primary-container font-headline-md text-lg py-3 border-b-[6px] border-on-primary-fixed-variant uppercase btn-brutal flex justify-center items-center gap-2 transition-all">
-                        Watch
-                        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
-</button>
-</div>
-</article>
-<!-- Card 3 -->
-<article class="relative flex flex-col bg-surface-container-lowest border-2 border-secondary-container p-unit group">
-<div class="relative w-full aspect-[2/3] bg-background border-2 border-surface-variant overflow-hidden">
-<img alt="Ghost in the Shell" class="w-full h-full object-cover grayscale contrast-125 brightness-75 sepia-[.2] group-hover:sepia-0 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDz5fi4SFT5_ea2j0WYivsWCorPvCuNRen6LBZmFnKBm9_ICzAHbICXZ-fHX-89LlFv8yiGw6jQ1XjMlzetb9UquuoYMS5XeTl1JLzGMo4SUXvJhZ6Zlu9WUNkCSDF_qPX59TJ0SKSOjg8v9cobQUzu_5S83u_4afhswmlbpxsQSLyVMWLcO-rlykqAHTJfeHbYjE8qN9QfErcTR-b32UpuXO_NSuLKgagqzc9KhY8bNBBMRx2dxrbWZlxS5LRElduUoP3IcFwy9SU"/>
-<div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none"></div>
-<div class="absolute top-3 -right-2 bg-secondary-container text-on-primary-container font-label-mono px-3 py-1 rotate-[2deg] border-2 border-surface-container-lowest shadow-[4px_4px_0px_rgba(0,0,0,1)] uppercase">
-                            Watchlist
-                        </div>
-</div>
-<div class="flex-1 flex flex-col gap-2 pt-3 px-1">
-<h3 class="font-headline-md uppercase text-on-surface truncate" title="Ghost in the Shell">Ghost in the Shell</h3>
-<div class="font-label-mono text-secondary uppercase text-[10px] tracking-widest flex items-center gap-1">
-<span class="material-symbols-outlined text-[14px]">videocam</span> SCIFI / ANI / 1995
-                    </div>
-<div class="font-label-mono text-tertiary uppercase text-[10px] tracking-widest">// ATMOSPHERIC · 83 MIN · 90s</div>
-<button class="mt-auto w-full bg-primary-container text-on-primary-container font-headline-md text-lg py-3 border-b-[6px] border-on-primary-fixed-variant uppercase btn-brutal flex justify-center items-center gap-2 transition-all">
-                        Watch
-                        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
-</button>
-</div>
-</article>
-<!-- Card 4 -->
-<article class="relative flex flex-col bg-surface-container-lowest border-2 border-secondary-container p-unit group">
-<div class="relative w-full aspect-[2/3] bg-background border-2 border-surface-variant overflow-hidden">
-<img alt="Fargo" class="w-full h-full object-cover grayscale contrast-125 brightness-75 sepia-[.2] group-hover:sepia-0 transition-all duration-300" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADNvVWWZrFk2ganmYYc_KeFbJ0m87HCTvfY-JEF2L6Y7cJ-WjBxjqt5HrVdwumZYw2HkEpJ3kkiUqxVXibLdi2bqqsy8gPiMy4x0YJ8dM8JV5mKQcZqkHLMQO3xB6os1dD1rHLxyV0WCKx4i82dQl5TiAvMOI7FeHFhq9Oj2-r39YJjILHAzqXBOvXFkynSEW3qMhw-m6C9Nm6WrLY5H8RGvD0GZMlClSNWusRbdJTJ-cLOMefvmOkzCUlPwNjd1Q2SrLnvxmh74s"/>
-<div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none"></div>
-<div class="absolute top-3 -right-2 bg-secondary-container text-on-primary-container font-label-mono px-3 py-1 rotate-[-1deg] border-2 border-surface-container-lowest shadow-[4px_4px_0px_rgba(0,0,0,1)] uppercase">
-                            Watchlist
-                        </div>
-</div>
-<div class="flex-1 flex flex-col gap-2 pt-3 px-1">
-<h3 class="font-headline-md uppercase text-on-surface truncate" title="Fargo">Fargo</h3>
-<div class="font-label-mono text-secondary uppercase text-[10px] tracking-widest flex items-center gap-1">
-<span class="material-symbols-outlined text-[14px]">videocam</span> CRIME / COM / 1996
-                    </div>
-<div class="font-label-mono text-tertiary uppercase text-[10px] tracking-widest">// FUNNY · 98 MIN · 90s</div>
-<button class="mt-auto w-full bg-primary-container text-on-primary-container font-headline-md text-lg py-3 border-b-[6px] border-on-primary-fixed-variant uppercase btn-brutal flex justify-center items-center gap-2 transition-all">
-                        Watch
-                        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
-</button>
-</div>
-</article>
 </div>
 </section>
 </main>
-<!-- BottomNavBar -->
 <nav class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-high border-t-2 border-outline">
 <div class="max-w-container-max mx-auto flex gap-2 px-4 pb-3 pt-2">
 <a class="flex flex-1 flex-col items-center justify-end gap-1 text-tertiary" href="#">
@@ -345,4 +266,216 @@
 </a>
 </div>
 </nav>
+<script>
+(function () {
+    const PICK_COUNT = 4;
+
+    // Genre→mood mapping. Letterboxd has no mood metadata, so we coerce
+    // genres into the four buckets the UI exposes. Films with multiple
+    // genres can satisfy multiple moods.
+    const MOOD_BY_GENRE = {
+        comedy: 'funny', stand_up: 'funny',
+        horror: 'intense', thriller: 'intense', action: 'intense', war: 'intense', crime: 'intense', mystery: 'intense',
+        drama: 'chill', romance: 'chill', music: 'chill', family: 'chill', tv_movie: 'chill', history: 'chill',
+        documentary: 'atmospheric', 'science-fiction': 'atmospheric', fantasy: 'atmospheric', animation: 'atmospheric', adventure: 'atmospheric', western: 'atmospheric'
+    };
+
+    const watchlistStatus = document.getElementById('watchlist-status');
+    const userHandle = document.getElementById('user-handle');
+    const filterSummary = document.getElementById('filter-summary');
+    const matchCount = document.getElementById('match-count');
+    const cardsGrid = document.getElementById('cards-grid');
+    const pickBtn = document.getElementById('pick-btn');
+
+    function getUsername() {
+        try { return localStorage.getItem('filmshelf:letterboxd_user'); } catch (e) { return null; }
+    }
+
+    function getEnrichedWatchlist() {
+        try {
+            const raw = localStorage.getItem('filmshelf:enriched_watchlist');
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) { return null; }
+    }
+
+    function getCheckedValues(group) {
+        return Array.from(document.querySelectorAll('[data-filter-group="' + group + '"] .chip-input:checked')).map(function (i) { return i.value; });
+    }
+
+    function readFilters() {
+        return {
+            moods: getCheckedValues('mood'),
+            runtimes: getCheckedValues('runtime'),
+            decades: getCheckedValues('decade')
+        };
+    }
+
+    function updateFilterSummary() {
+        const f = readFilters();
+        const parts = [];
+        if (f.moods.length) parts.push('MOOD: ' + f.moods.join('+').toUpperCase());
+        if (f.runtimes.length) parts.push('RT: ' + f.runtimes.join('+').toUpperCase());
+        if (f.decades.length) parts.push('DEC: ' + f.decades.join('+').toUpperCase());
+        filterSummary.textContent = parts.length ? '// ' + parts.join(' · ') : '// NO FILTERS APPLIED — ANY FILM ELIGIBLE';
+    }
+
+    function decadeOf(year) {
+        if (year == null) return null;
+        if (year >= 2010) return '10s+';
+        if (year >= 2000) return '00s';
+        if (year >= 1990) return '90s';
+        if (year >= 1980) return '80s';
+        if (year >= 1970) return '70s';
+        return null;
+    }
+
+    function matchesDecade(film, decades) {
+        if (!decades.length) return true;
+        return decades.indexOf(decadeOf(film.year)) !== -1;
+    }
+
+    function matchesRuntime(film, runtimes) {
+        if (!runtimes.length) return true;
+        const r = film.runtime;
+        if (r == null) return false;
+        if (runtimes.indexOf('short') !== -1 && r < 90) return true;
+        if (runtimes.indexOf('medium') !== -1 && r >= 90 && r <= 120) return true;
+        if (runtimes.indexOf('long') !== -1 && r > 120) return true;
+        return false;
+    }
+
+    function moodsOfFilm(film) {
+        return (film.genres || [])
+            .map(function (g) { return MOOD_BY_GENRE[g.replace(/-/g, '_')] || MOOD_BY_GENRE[g]; })
+            .filter(Boolean);
+    }
+
+    function matchesMood(film, moods) {
+        if (!moods.length) return true;
+        const filmMoods = moodsOfFilm(film);
+        return filmMoods.some(function (m) { return moods.indexOf(m) !== -1; });
+    }
+
+    function shuffle(arr) {
+        const a = arr.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+        }
+        return a;
+    }
+
+    function renderSkeletons() {
+        cardsGrid.innerHTML = '';
+        for (let i = 0; i < PICK_COUNT; i++) {
+            const card = document.createElement('article');
+            card.className = 'relative flex flex-col bg-surface-container-lowest border-2 border-outline-variant p-unit';
+            card.innerHTML =
+                '<div class="w-full aspect-[2/3] skeleton-shimmer"></div>' +
+                '<div class="pt-3 px-1 flex flex-col gap-2">' +
+                '  <div class="h-6 skeleton-shimmer"></div>' +
+                '  <div class="h-3 w-2/3 skeleton-shimmer"></div>' +
+                '  <div class="h-10 skeleton-shimmer mt-2"></div>' +
+                '</div>';
+            cardsGrid.appendChild(card);
+        }
+    }
+
+    function renderEmpty(message) {
+        cardsGrid.innerHTML = '';
+        const wrap = document.createElement('div');
+        wrap.className = 'bg-surface-container-lowest border-2 border-error border-dashed p-6 col-span-full text-center';
+        wrap.innerHTML = '<p class="font-label-mono text-error uppercase tracking-widest">// ' + message + '</p>';
+        cardsGrid.appendChild(wrap);
+    }
+
+    function renderCards(films) {
+        cardsGrid.innerHTML = '';
+        const rotations = ['rotate-[3deg]', 'rotate-[-2deg]', 'rotate-[2deg]', 'rotate-[-1deg]'];
+        films.forEach(function (f, idx) {
+            const moodTags = moodsOfFilm(f);
+            const moodLabel = moodTags.length ? moodTags[0].toUpperCase() : 'UNCATEGORIZED';
+            const dec = decadeOf(f.year);
+            const card = document.createElement('article');
+            card.className = 'relative flex flex-col bg-surface-container-lowest border-2 border-secondary-container p-unit group';
+            const posterImg = f.poster
+                ? '<img alt="' + escapeAttr(f.title) + '" class="w-full h-full object-cover grayscale contrast-125 brightness-75 sepia-[.2] group-hover:sepia-0 transition-all duration-300" src="' + f.poster + '" loading="lazy" referrerpolicy="no-referrer" />'
+                : '<div class="w-full h-full flex items-center justify-center text-on-surface-variant font-label-mono text-[10px] uppercase">NO POSTER</div>';
+            const firstGenre = (f.genres && f.genres[0]) || 'FILM';
+            card.innerHTML =
+                '<div class="relative w-full aspect-[2/3] bg-background border-2 border-surface-variant overflow-hidden">' +
+                    posterImg +
+                    '<div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px] pointer-events-none"></div>' +
+                    '<div class="absolute top-3 -right-2 bg-secondary-container text-on-primary-container font-label-mono px-3 py-1 ' + rotations[idx % rotations.length] + ' border-2 border-surface-container-lowest shadow-[4px_4px_0px_rgba(0,0,0,1)] uppercase">Watchlist</div>' +
+                '</div>' +
+                '<div class="flex-1 flex flex-col gap-2 pt-3 px-1">' +
+                    '<h3 class="font-headline-md uppercase text-on-surface truncate" title="' + escapeAttr(f.title) + '">' + escapeText(f.title) + '</h3>' +
+                    '<div class="font-label-mono text-secondary uppercase text-[10px] tracking-widest flex items-center gap-1">' +
+                        '<span class="material-symbols-outlined text-[14px]">videocam</span> ' + escapeText(firstGenre.toUpperCase().slice(0, 3)) + ' / ' + (f.year || '----') +
+                    '</div>' +
+                    '<div class="font-label-mono text-tertiary uppercase text-[10px] tracking-widest">// ' + moodLabel + ' · ' + (f.runtime ? f.runtime + ' MIN' : '?? MIN') + ' · ' + (dec || '----') + '</div>' +
+                    '<a href="https://letterboxd.com/film/' + encodeURIComponent(f.slug) + '/" target="_blank" rel="noopener" class="mt-auto w-full bg-primary-container text-on-primary-container font-headline-md text-lg py-3 border-b-[6px] border-on-primary-fixed-variant uppercase btn-brutal flex justify-center items-center gap-2 transition-all">' +
+                        'View<span class="material-symbols-outlined" style="font-variation-settings: \'FILL\' 1;">open_in_new</span>' +
+                    '</a>' +
+                '</div>';
+            cardsGrid.appendChild(card);
+        });
+    }
+
+    function escapeAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+    function escapeText(s) { return String(s).replace(/[&<>]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]; }); }
+
+    function pickFromShelf() {
+        const username = getUsername();
+        if (!username) {
+            renderEmpty('NO ACCOUNT SYNCED. GO TO ME → SYNC FIRST.');
+            return;
+        }
+        const cache = getEnrichedWatchlist();
+        if (!cache || cache.username !== username || !cache.films || !cache.films.length) {
+            renderEmpty('NO CACHED WATCHLIST. RUN /SYNC ON THE ME PAGE.');
+            return;
+        }
+
+        const filters = readFilters();
+        const enrichedOnly = cache.films.filter(function (f) { return f.runtime != null || (f.genres && f.genres.length) || f.poster; });
+        const usable = enrichedOnly.length ? enrichedOnly : cache.films;
+
+        const matched = usable.filter(function (f) {
+            return matchesDecade(f, filters.decades) && matchesRuntime(f, filters.runtimes) && matchesMood(f, filters.moods);
+        });
+
+        if (!matched.length) {
+            renderEmpty('NOTHING IN YOUR WATCHLIST MATCHES THESE FILTERS.');
+            matchCount.textContent = '// 0 OF ' + cache.films.length + ' ENTRIES MATCH SELECTION';
+            return;
+        }
+
+        const picks = shuffle(matched).slice(0, PICK_COUNT);
+        renderCards(picks);
+        const cacheNote = cache.complete ? '' : ' (PARTIAL CACHE — RE-SYNC TO COMPLETE)';
+        matchCount.textContent = '// ' + picks.length + ' OF ' + matched.length + ' MATCHES SHOWN · ' + cache.films.length + ' TOTAL' + cacheNote;
+    }
+
+    function initOSD() {
+        const username = getUsername();
+        if (!username) return;
+        userHandle.textContent = '@' + username.toUpperCase();
+        const cache = getEnrichedWatchlist();
+        if (cache && cache.username === username) {
+            const enrichedCount = cache.films.filter(function (f) { return f.runtime != null || (f.genres && f.genres.length); }).length;
+            const tag = cache.complete ? 'COMPLETE' : (enrichedCount + '/' + cache.films.length + ' ENRICHED');
+            watchlistStatus.textContent = 'WATCHLIST: ' + cache.films.length + ' · ' + tag;
+        } else {
+            watchlistStatus.textContent = 'WATCHLIST: SYNC REQUIRED';
+        }
+    }
+    initOSD();
+
+    document.querySelectorAll('.chip-input').forEach(function (input) {
+        input.addEventListener('change', updateFilterSummary);
+    });
+    pickBtn.addEventListener('click', pickFromShelf);
+})();
+</script>
 </body></html>

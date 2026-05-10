@@ -167,10 +167,33 @@ Letterboxd Source URL
 </div>
 <p class="text-outline text-[10px] font-label-mono mt-1">// ENTER VALID URI FOR TAPE EXTRACTION</p>
 </div>
-<button id="sync-btn" class="w-full max-w-md bg-primary-container hover:bg-inverse-primary text-on-primary-container font-headline-md uppercase py-4 border-b-4 border-on-primary-fixed-variant active:border-b-0 active:translate-y-[4px] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:border-b-4">
+<div class="flex flex-col md:flex-row gap-3 w-full max-w-md">
+<button id="sync-btn" class="flex-1 bg-primary-container hover:bg-inverse-primary text-on-primary-container font-headline-md uppercase py-4 border-b-4 border-on-primary-fixed-variant active:border-b-0 active:translate-y-[4px] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:border-b-4">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_circle</span>
 Initialize Sync
 </button>
+<button id="cancel-btn" class="hidden bg-surface-container-high hover:bg-surface-container-highest text-error font-headline-md uppercase py-4 px-4 border-b-4 border-outline active:border-b-0 active:translate-y-[4px] transition-all items-center justify-center gap-2">
+<span class="material-symbols-outlined">stop_circle</span>
+Cancel
+</button>
+</div>
+<div id="progress-panel" class="hidden w-full bg-surface-container-lowest border-2 border-tertiary p-4 flex-col gap-3 mt-2">
+<div class="flex justify-between items-baseline">
+<span id="progress-phase" class="font-label-mono text-tertiary uppercase tracking-widest">PHASE — / —</span>
+<span id="progress-percent" class="font-headline-md text-tertiary">0%</span>
+</div>
+<div class="w-full h-3 bg-surface-container-high border border-outline-variant overflow-hidden">
+<div id="progress-bar" class="h-full bg-tertiary transition-all duration-150" style="width: 0%"></div>
+</div>
+<div class="flex justify-between items-center font-label-mono text-[11px] uppercase tracking-widest gap-3">
+<span id="progress-current" class="text-on-surface truncate flex-1">// IDLE</span>
+<span id="progress-stats" class="text-on-surface-variant whitespace-nowrap">OK 0 · FAIL 0</span>
+</div>
+<div class="flex justify-between font-label-mono text-[10px] uppercase tracking-widest text-outline">
+<span id="progress-counts">0 / 0</span>
+<span id="progress-eta">ETA --:--</span>
+</div>
+</div>
 </div>
 </section>
 <section class="bg-surface-container-lowest border-2 border-outline flex flex-col">
@@ -223,19 +246,36 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
 <script>
 (function () {
     const btn = document.getElementById('sync-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
     const input = document.getElementById('letterboxd-url');
     const logContainer = document.getElementById('log-container');
     const statusBadge = document.getElementById('status-badge');
     const accountBadge = document.getElementById('account-badge');
+    const progressPanel = document.getElementById('progress-panel');
+    const progressPhase = document.getElementById('progress-phase');
+    const progressPercent = document.getElementById('progress-percent');
+    const progressBar = document.getElementById('progress-bar');
+    const progressCurrent = document.getElementById('progress-current');
+    const progressStats = document.getElementById('progress-stats');
+    const progressCounts = document.getElementById('progress-counts');
+    const progressEta = document.getElementById('progress-eta');
+    const baseTitle = document.title;
 
-    // Free CORS proxies tried in order. Each is unreliable on its own;
-    // the chain gives us a usable success rate. Each builder takes the
-    // raw target URL and returns the proxied URL.
+    // allorigins is the most permissive of the three free proxies; we
+    // lead with it so we don't burn cors.lol's per-IP rate limit on the
+    // first request. codetabs is last because it returns HTTP 200 with
+    // a tiny "error code: 1015" body when throttled.
     const PROXIES = [
-        function (u) { return 'https://api.cors.lol/?url=' + encodeURIComponent(u); },
-        function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
-        function (u) { return 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u); }
+        { name: 'allorigins', build: function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); } },
+        { name: 'cors.lol',   build: function (u) { return 'https://api.cors.lol/?url=' + encodeURIComponent(u); } },
+        { name: 'codetabs',   build: function (u) { return 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u); } }
     ];
+    const WATCHLIST_PER_PAGE = 28;
+    const PROXY_TIMEOUT_MS = 8000;
+    const ENRICH_GAP_MS = 350;       // pause between detail fetches
+    const PERSIST_EVERY = 5;         // save progress every N enriched films
+
+    let cancelRequested = false;
 
     function extractUsername(value) {
         value = value.trim().replace(/\/+$/, '');
@@ -273,27 +313,29 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
         return new Promise(function (r) { setTimeout(r, ms); });
     }
 
-    // Try each proxy in turn. Fail only after all of them have failed.
-    // Treat tiny / non-matching responses as failures so we fall through
-    // when a proxy returns its own homepage or a rate-limit message.
     async function fetchViaProxy(targetUrl, validate) {
-        let lastErr;
+        const failures = [];
         for (let i = 0; i < PROXIES.length; i++) {
-            const proxyUrl = PROXIES[i](targetUrl);
+            if (cancelRequested) throw new Error('CANCELLED');
+            const p = PROXIES[i];
+            const ctrl = new AbortController();
+            const timer = setTimeout(function () { ctrl.abort(); }, PROXY_TIMEOUT_MS);
             try {
-                const res = await fetch(proxyUrl);
-                if (!res.ok) { lastErr = new Error('HTTP ' + res.status); continue; }
+                const res = await fetch(p.build(targetUrl), { signal: ctrl.signal });
+                if (!res.ok) { failures.push(p.name + ':HTTP' + res.status); continue; }
                 const text = await res.text();
                 if (validate && !validate(text)) {
-                    lastErr = new Error('INVALID PAYLOAD FROM PROXY ' + (i + 1));
+                    failures.push(p.name + ':' + (text.length < 60 ? text.replace(/\s+/g, ' ').slice(0, 50) : 'BAD_BODY'));
                     continue;
                 }
                 return text;
             } catch (e) {
-                lastErr = e;
+                failures.push(p.name + ':' + (e.name === 'AbortError' ? 'TIMEOUT' : (e.message || 'ERR')));
+            } finally {
+                clearTimeout(timer);
             }
         }
-        throw lastErr || new Error('ALL PROXIES FAILED');
+        throw new Error('ALL PROXIES FAILED [' + failures.join(' | ') + ']');
     }
 
     function parseRSS(xml) {
@@ -307,28 +349,130 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
         return raw.replace(/,\s*\d{4}$/, '').trim();
     }
 
-    // Letterboxd doesn't expose a watchlist RSS feed. The watchlist
-    // landing page does include a `data-num-entries="N"` attribute on
-    // the list container, so we scrape that out of the HTML.
-    function extractWatchlistCount(html) {
-        const m = html.match(/data-num-entries="(\d+)"/);
-        return m ? parseInt(m[1], 10) : null;
+    function parseWatchlistPage(html) {
+        const films = [];
+        const re = /data-item-name="([^"]+)"[^>]*data-item-slug="([^"]+)"/g;
+        let m;
+        while ((m = re.exec(html)) !== null) {
+            const nameWithYear = m[1].replace(/&amp;/g, '&').replace(/&#39;/g, "'");
+            const slug = m[2];
+            const yearMatch = nameWithYear.match(/\((\d{4})\)\s*$/);
+            const year = yearMatch ? parseInt(yearMatch[1], 10) : null;
+            const title = nameWithYear.replace(/\s*\(\d{4}\)\s*$/, '').trim();
+            films.push({ title: title, slug: slug, year: year });
+        }
+        const numMatch = html.match(/data-num-entries="(\d+)"/);
+        return { films: films, numEntries: numMatch ? parseInt(numMatch[1], 10) : films.length };
+    }
+
+    async function fetchWatchlistPage(username, page) {
+        const url = 'https://letterboxd.com/' + username + '/watchlist/' + (page > 1 ? 'page/' + page + '/' : '');
+        const html = await fetchViaProxy(url, function (t) { return t.indexOf('data-item-slug') !== -1 || t.indexOf('data-num-entries') !== -1; });
+        return parseWatchlistPage(html);
+    }
+
+    async function fetchFilmDetail(slug) {
+        const html = await fetchViaProxy(
+            'https://letterboxd.com/film/' + slug + '/',
+            function (t) { return t.indexOf('og:image') !== -1; }
+        );
+        const posterMatch = html.match(/property="og:image"\s+content="([^"]+)"/);
+        const runtimeMatch = html.match(/(\d+)\s*&nbsp;mins/) || html.match(/(\d+)\s*mins?\b/);
+        const genres = [];
+        const genreRe = /\/films\/genre\/([a-z-]+)\//g;
+        let g;
+        while ((g = genreRe.exec(html)) !== null) {
+            if (genres.indexOf(g[1]) === -1) genres.push(g[1]);
+        }
+        return {
+            poster: posterMatch ? posterMatch[1] : null,
+            runtime: runtimeMatch ? parseInt(runtimeMatch[1], 10) : null,
+            genres: genres
+        };
+    }
+
+    function saveEnriched(username, films, complete) {
+        try {
+            localStorage.setItem('filmshelf:enriched_watchlist', JSON.stringify({
+                username: username,
+                ts: Date.now(),
+                complete: !!complete,
+                films: films
+            }));
+        } catch (e) {
+            appendLog('WARN: LOCALSTORAGE WRITE FAILED (' + (e.message || 'QUOTA?') + ')', 'text-error');
+        }
+    }
+
+    function setSyncRunning(running) {
+        btn.disabled = running;
+        if (running) {
+            cancelBtn.classList.remove('hidden');
+            cancelBtn.classList.add('flex');
+            progressPanel.classList.remove('hidden');
+            progressPanel.classList.add('flex');
+        } else {
+            cancelBtn.classList.add('hidden');
+            cancelBtn.classList.remove('flex');
+            document.title = baseTitle;
+        }
+    }
+
+    function fmtEta(seconds) {
+        if (!isFinite(seconds) || seconds <= 0) return '--:--';
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    }
+
+    // Updates the visible progress card AND the document title so the
+    // browser-tab badge reflects sync state when the user is on another
+    // tab. Pass partial fields; unspecified values are left as-is.
+    function setProgressPanel(opts) {
+        if (opts.phase) progressPhase.textContent = opts.phase;
+        if (typeof opts.done === 'number' && typeof opts.total === 'number') {
+            const pct = opts.total > 0 ? Math.floor((opts.done / opts.total) * 100) : 0;
+            progressPercent.textContent = pct + '%';
+            progressBar.style.width = pct + '%';
+            progressCounts.textContent = opts.done + ' / ' + opts.total;
+            const titleTag = opts.titleTag || (opts.phase || 'SYNC');
+            document.title = '[' + pct + '%] ' + titleTag + ' · ' + baseTitle;
+            statusBadge.textContent = 'Status: ' + pct + '% · ' + titleTag;
+        }
+        if (opts.current != null) progressCurrent.textContent = opts.current ? '> ' + opts.current : '// IDLE';
+        if (typeof opts.ok === 'number' && typeof opts.fail === 'number') {
+            progressStats.textContent = 'OK ' + opts.ok + ' · FAIL ' + opts.fail;
+        }
+        if (opts.etaSec != null) progressEta.textContent = 'ETA ' + fmtEta(opts.etaSec);
+    }
+
+    function resetProgressPanel() {
+        progressPhase.textContent = 'PHASE — / —';
+        progressPercent.textContent = '0%';
+        progressBar.style.width = '0%';
+        progressCurrent.textContent = '// IDLE';
+        progressStats.textContent = 'OK 0 · FAIL 0';
+        progressCounts.textContent = '0 / 0';
+        progressEta.textContent = 'ETA --:--';
     }
 
     async function runSync(username) {
         resetLog();
-        statusBadge.textContent = 'Status: Processing';
+        resetProgressPanel();
+        cancelRequested = false;
+        statusBadge.textContent = 'Status: Connecting';
         statusBadge.classList.add('blink-text');
-        btn.disabled = true;
+        setSyncRunning(true);
+        setProgressPanel({ phase: 'CONNECTING', done: 0, total: 1, titleTag: 'CONNECTING', current: null, ok: 0, fail: 0, etaSec: 0 });
 
         try {
             appendLog('INITIALIZING SECURE CONNECTION TO TAPE ARCHIVE...');
-            await delay(400);
-            appendLog('HANDSHAKE SUCCESSFUL. NODE: US-EAST-09.');
             await delay(300);
+            appendLog('HANDSHAKE SUCCESSFUL. NODE: US-EAST-09.');
+            await delay(200);
             appendLog('LOCATING ACCOUNT: @' + username.toUpperCase() + '...');
 
-            // Diary RSS — the canonical signal that a Letterboxd account exists.
+            // Diary RSS validates the account exists.
             let diaryItems;
             try {
                 const diaryXml = await fetchViaProxy(
@@ -337,63 +481,110 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
                 );
                 diaryItems = parseRSS(diaryXml);
             } catch (e) {
+                if (cancelRequested) throw e;
                 throw new Error('ACCOUNT NOT FOUND OR FEED UNREACHABLE');
             }
+            appendLog('TARGET ACCOUNT LOCATED. ' + diaryItems.length + ' DIARY ENTRIES.', 'text-on-surface');
 
-            appendLog('TARGET ACCOUNT LOCATED: @' + username.toUpperCase());
-            await delay(300);
-            appendLog('SCANNING DIARY ENTRIES... [||||||||||||] 100%', 'text-tertiary');
-            await delay(200);
-            appendLog('FOUND ' + diaryItems.length + ' RECENT DIARY ENTRIES.', 'text-on-surface');
+            // === Phase 1: enumerate watchlist pages ===
+            appendLog('PHASE 1/2: ENUMERATING WATCHLIST...', 'text-tertiary');
+            setProgressPanel({ phase: 'PHASE 1/2 · ENUMERATING WATCHLIST', titleTag: 'PHASE 1', done: 0, total: 1, current: 'FETCHING PAGE 1' });
+            const firstPage = await fetchWatchlistPage(username, 1);
+            const totalPages = Math.max(1, Math.ceil(firstPage.numEntries / WATCHLIST_PER_PAGE));
+            appendLog('WATCHLIST: ' + firstPage.numEntries + ' ENTRIES / ' + totalPages + ' PAGES.', 'text-on-surface');
+            setProgressPanel({ done: 1, total: totalPages, current: 'PAGE 1 OK · ' + firstPage.films.length + ' FILMS' });
 
-            // Watchlist count — best-effort. Letterboxd has no RSS endpoint
-            // for it, so we scrape the HTML page. If every proxy is rate-
-            // limited or down, we degrade gracefully instead of aborting.
-            let watchlistCount = null;
-            try {
-                const watchlistHtml = await fetchViaProxy(
-                    'https://letterboxd.com/' + username + '/watchlist/',
-                    function (t) { return t.indexOf('data-num-entries') !== -1; }
-                );
-                watchlistCount = extractWatchlistCount(watchlistHtml);
-            } catch (e) { /* swallow — handled below */ }
+            const allFilms = firstPage.films.slice();
+            const phase1Start = Date.now();
+            for (let p = 2; p <= totalPages; p++) {
+                if (cancelRequested) throw new Error('CANCELLED');
+                setProgressPanel({
+                    done: p - 1,
+                    total: totalPages,
+                    current: 'FETCHING PAGE ' + p + ' / ' + totalPages,
+                    titleTag: 'PHASE 1',
+                    etaSec: ((Date.now() - phase1Start) / 1000 / Math.max(1, p - 1)) * (totalPages - (p - 1))
+                });
+                try {
+                    const pageData = await fetchWatchlistPage(username, p);
+                    allFilms.push.apply(allFilms, pageData.films);
+                    setProgressPanel({ done: p, total: totalPages, current: 'PAGE ' + p + ' OK · ' + pageData.films.length + ' FILMS' });
+                } catch (e) {
+                    appendLog('SKIP PAGE ' + p + ': ' + (e.message || 'ERR').slice(0, 80), 'text-error');
+                    setProgressPanel({ done: p, total: totalPages, current: 'PAGE ' + p + ' SKIPPED' });
+                }
+                await delay(150);
+            }
+            appendLog('PHASE 1 COMPLETE. ' + allFilms.length + ' FILMS COLLECTED.', 'text-tertiary');
 
-            if (watchlistCount !== null) {
-                appendLog('FOUND ' + watchlistCount + ' WATCHLIST ENTRIES.', 'text-on-surface');
+            // Persist titles immediately so a cancelled or failed phase 2
+            // still leaves something usable for Shelf Pick.
+            saveEnriched(username, allFilms.map(function (f) { return Object.assign({}, f); }), false);
+
+            // === Phase 2: deep-enrich each film with poster/runtime/genres ===
+            const etaMin = Math.ceil(allFilms.length * (1.0 + ENRICH_GAP_MS / 1000) / 60);
+            appendLog('PHASE 2/2: DEEP-ENRICH ' + allFilms.length + ' FILMS. ETA ~' + etaMin + ' MIN.', 'text-tertiary');
+            appendLog('// CANCEL ANYTIME — PROGRESS IS SAVED EVERY ' + PERSIST_EVERY + ' FILMS.', 'text-on-surface-variant');
+            setProgressPanel({ phase: 'PHASE 2/2 · ENRICHING FILMS', titleTag: 'ENRICHING', done: 0, total: allFilms.length, current: null, ok: 0, fail: 0, etaSec: allFilms.length * (1.0 + ENRICH_GAP_MS / 1000) });
+
+            const enriched = [];
+            let okCount = 0, failCount = 0;
+            const startTs = Date.now();
+            for (let i = 0; i < allFilms.length; i++) {
+                if (cancelRequested) break;
+                const film = allFilms[i];
+                setProgressPanel({
+                    done: i,
+                    total: allFilms.length,
+                    current: film.title.toUpperCase(),
+                    titleTag: 'ENRICHING',
+                    ok: okCount,
+                    fail: failCount,
+                    etaSec: i > 0 ? ((Date.now() - startTs) / 1000 / i) * (allFilms.length - i) : null
+                });
+                try {
+                    const detail = await fetchFilmDetail(film.slug);
+                    enriched.push(Object.assign({}, film, detail));
+                    okCount++;
+                } catch (e) {
+                    enriched.push(Object.assign({}, film, { poster: null, runtime: null, genres: [] }));
+                    failCount++;
+                }
+                setProgressPanel({ done: i + 1, total: allFilms.length, ok: okCount, fail: failCount });
+                if ((i + 1) % PERSIST_EVERY === 0) {
+                    // Merge enriched into the full list so cancel preserves
+                    // titles for films we haven't reached yet.
+                    const merged = enriched.concat(allFilms.slice(i + 1).map(function (f) { return Object.assign({}, f); }));
+                    saveEnriched(username, merged, false);
+                }
+                await delay(ENRICH_GAP_MS);
+            }
+            setProgressPanel({ current: null });
+
+            const finalList = enriched.concat(allFilms.slice(enriched.length).map(function (f) { return Object.assign({}, f); }));
+            saveEnriched(username, finalList, !cancelRequested && enriched.length === allFilms.length);
+
+            if (cancelRequested) {
+                appendLog('CANCELLED. ' + enriched.length + '/' + allFilms.length + ' FILMS ENRICHED, REST CACHED AS TITLE-ONLY.', 'text-error');
+                statusBadge.textContent = 'Status: Cancelled';
             } else {
-                appendLog('WATCHLIST: UNAVAILABLE (PROXY THROTTLED).', 'text-error');
-            }
-            await delay(200);
-            appendLog('INITIATING METADATA SCRAPE PROTOCOL...');
-            await delay(300);
-
-            const recent = diaryItems.slice(0, 4);
-            for (const item of recent) {
-                const title = extractTitle(item).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '');
-                appendLog('INDEXED: ' + title + '.DAT', 'text-on-surface');
-                await delay(120);
+                appendLog('PHASE 2 COMPLETE. OK:' + okCount + ' FAIL:' + failCount + '.', 'text-tertiary');
+                appendLog('DEEP SYNC COMPLETE. SHELF PICK IS READY.', 'text-tertiary');
+                statusBadge.textContent = 'Status: Online';
+                statusBadge.classList.remove('blink-text');
             }
 
-            appendLog('ALLOCATING SHELF SPACE...', 'text-tertiary');
-            await delay(300);
-            appendLog('SYNC COMPLETE. TAPE ARCHIVE READY.', 'text-tertiary');
-
-            statusBadge.textContent = 'Status: Online';
-            statusBadge.classList.remove('blink-text');
             accountBadge.textContent = '@' + username.toUpperCase();
-
-            try {
-                localStorage.setItem('filmshelf:letterboxd_user', username);
-            } catch (e) { /* storage disabled — non-fatal */ }
-
-            appendCursor('bg-tertiary');
+            try { localStorage.setItem('filmshelf:letterboxd_user', username); } catch (e) {}
+            appendCursor(cancelRequested ? 'bg-primary-container' : 'bg-tertiary');
         } catch (err) {
-            appendLog('ERROR: ' + (err.message || 'CONNECTION FAILED'), 'text-error');
-            appendLog('SYNC ABORTED. CHECK URL AND RETRY.', 'text-error');
-            statusBadge.textContent = 'Status: Error';
+            const msg = err && err.message === 'CANCELLED' ? 'SYNC CANCELLED BY USER.' : 'ERROR: ' + (err.message || 'CONNECTION FAILED');
+            appendLog(msg, 'text-error');
+            statusBadge.textContent = err && err.message === 'CANCELLED' ? 'Status: Cancelled' : 'Status: Error';
             appendCursor('bg-primary-container');
         } finally {
-            btn.disabled = false;
+            setSyncRunning(false);
+            cancelRequested = false;
         }
     }
 
@@ -403,6 +594,15 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
         if (saved) {
             input.value = 'letterboxd.com/' + saved;
             accountBadge.textContent = '@' + saved.toUpperCase();
+        }
+        const enriched = localStorage.getItem('filmshelf:enriched_watchlist');
+        if (enriched) {
+            try {
+                const parsed = JSON.parse(enriched);
+                if (parsed && parsed.films) {
+                    appendLog('CACHED: ' + parsed.films.length + ' FILMS' + (parsed.complete ? ' (COMPLETE)' : ' (PARTIAL)'), 'text-on-surface');
+                }
+            } catch (e) {}
         }
     } catch (e) { /* storage disabled — non-fatal */ }
 
@@ -415,6 +615,11 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
             return;
         }
         runSync(username);
+    });
+
+    cancelBtn.addEventListener('click', function () {
+        cancelRequested = true;
+        appendLog('CANCEL REQUESTED — STOPPING AFTER CURRENT FETCH...', 'text-error');
     });
 
     input.addEventListener('keydown', function (e) {
