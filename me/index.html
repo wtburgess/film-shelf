@@ -272,8 +272,8 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
     ];
     const WATCHLIST_PER_PAGE = 28;
     const PROXY_TIMEOUT_MS = 8000;
-    const ENRICH_GAP_MS = 350;       // pause between detail fetches
-    const PERSIST_EVERY = 5;         // save progress every N enriched films
+    const ENRICH_CONCURRENCY = 3;    // parallel detail-fetch workers — 3 plays well with the 3-proxy chain without tripping per-IP limits
+    const PERSIST_EVERY = 10;        // save progress every N completions (counted across workers)
 
     let cancelRequested = false;
 
@@ -522,53 +522,87 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
             saveEnriched(username, allFilms.map(function (f) { return Object.assign({}, f); }), false);
 
             // === Phase 2: deep-enrich each film with poster/runtime/genres ===
-            const etaMin = Math.ceil(allFilms.length * (1.0 + ENRICH_GAP_MS / 1000) / 60);
-            appendLog('PHASE 2/2: DEEP-ENRICH ' + allFilms.length + ' FILMS. ETA ~' + etaMin + ' MIN.', 'text-tertiary');
+            // Async worker pool: ENRICH_CONCURRENCY workers pull from a
+            // shared cursor and each worker awaits its own fetch. No
+            // setTimeout gaps — fetch backpressure handles pacing, and
+            // browsers don't throttle network calls in background tabs
+            // the way they throttle setTimeout, so this also fixes the
+            // "stops when I switch tabs" problem.
+            const etaMin = Math.ceil(allFilms.length / ENRICH_CONCURRENCY / 60);
+            appendLog('PHASE 2/2: DEEP-ENRICH ' + allFilms.length + ' FILMS · ' + ENRICH_CONCURRENCY + ' PARALLEL WORKERS · ETA ~' + etaMin + ' MIN.', 'text-tertiary');
             appendLog('// CANCEL ANYTIME — PROGRESS IS SAVED EVERY ' + PERSIST_EVERY + ' FILMS.', 'text-on-surface-variant');
-            setProgressPanel({ phase: 'PHASE 2/2 · ENRICHING FILMS', titleTag: 'ENRICHING', done: 0, total: allFilms.length, current: null, ok: 0, fail: 0, etaSec: allFilms.length * (1.0 + ENRICH_GAP_MS / 1000) });
+            setProgressPanel({ phase: 'PHASE 2/2 · ENRICHING FILMS', titleTag: 'ENRICHING', done: 0, total: 1, current: null, ok: 0, fail: 0, etaSec: null });
 
-            const enriched = [];
-            let okCount = 0, failCount = 0;
+            // Pre-seed `enriched` with whatever we already have in
+            // localStorage from a prior sync — that way a re-sync only
+            // refetches films that previously failed (or are missing).
+            const priorBySlug = {};
+            try {
+                const prior = JSON.parse(localStorage.getItem('filmshelf:enriched_watchlist') || 'null');
+                if (prior && prior.username === username && Array.isArray(prior.films)) {
+                    prior.films.forEach(function (f) { priorBySlug[f.slug] = f; });
+                }
+            } catch (e) {}
+
+            const enriched = allFilms.map(function (f) {
+                const cached = priorBySlug[f.slug];
+                if (cached && cached.runtime != null && cached.poster && cached.genres && cached.genres.length) {
+                    return Object.assign({}, cached);
+                }
+                return Object.assign({}, f);
+            });
+            const isEnriched = function (entry) { return entry.runtime != null && entry.poster && entry.genres && entry.genres.length; };
+            const indicesToFetch = enriched.map(function (e, i) { return isEnriched(e) ? -1 : i; }).filter(function (i) { return i !== -1; });
+            const skipped = allFilms.length - indicesToFetch.length;
+            if (skipped > 0) appendLog('SKIPPING ' + skipped + ' ALREADY-ENRICHED FILMS FROM CACHE.', 'text-on-surface-variant');
+
+            let cursor = 0;
+            let okCount = 0, failCount = 0, doneCount = 0;
+            const totalToFetch = indicesToFetch.length;
             const startTs = Date.now();
-            for (let i = 0; i < allFilms.length; i++) {
-                if (cancelRequested) break;
-                const film = allFilms[i];
-                setProgressPanel({
-                    done: i,
-                    total: allFilms.length,
-                    current: film.title.toUpperCase(),
-                    titleTag: 'ENRICHING',
-                    ok: okCount,
-                    fail: failCount,
-                    etaSec: i > 0 ? ((Date.now() - startTs) / 1000 / i) * (allFilms.length - i) : null
-                });
-                try {
-                    const detail = await fetchFilmDetail(film.slug);
-                    enriched.push(Object.assign({}, film, detail));
-                    okCount++;
-                } catch (e) {
-                    enriched.push(Object.assign({}, film, { poster: null, runtime: null, genres: [] }));
-                    failCount++;
+
+            async function worker() {
+                while (cursor < indicesToFetch.length && !cancelRequested) {
+                    const i = indicesToFetch[cursor++];
+                    const film = allFilms[i];
+                    setProgressPanel({ current: film.title.toUpperCase() });
+                    try {
+                        const detail = await fetchFilmDetail(film.slug);
+                        enriched[i] = Object.assign({}, film, detail);
+                        okCount++;
+                    } catch (e) {
+                        enriched[i] = Object.assign({}, film, { poster: null, runtime: null, genres: [] });
+                        failCount++;
+                    }
+                    doneCount++;
+                    const elapsed = (Date.now() - startTs) / 1000;
+                    setProgressPanel({
+                        done: doneCount,
+                        total: totalToFetch,
+                        ok: okCount,
+                        fail: failCount,
+                        titleTag: 'ENRICHING',
+                        etaSec: doneCount > 0 ? (elapsed / doneCount) * (totalToFetch - doneCount) : null
+                    });
+                    if (doneCount % PERSIST_EVERY === 0) saveEnriched(username, enriched, false);
                 }
-                setProgressPanel({ done: i + 1, total: allFilms.length, ok: okCount, fail: failCount });
-                if ((i + 1) % PERSIST_EVERY === 0) {
-                    // Merge enriched into the full list so cancel preserves
-                    // titles for films we haven't reached yet.
-                    const merged = enriched.concat(allFilms.slice(i + 1).map(function (f) { return Object.assign({}, f); }));
-                    saveEnriched(username, merged, false);
-                }
-                await delay(ENRICH_GAP_MS);
             }
+
+            const workers = [];
+            for (let w = 0; w < ENRICH_CONCURRENCY; w++) workers.push(worker());
+            await Promise.all(workers);
             setProgressPanel({ current: null });
 
-            const finalList = enriched.concat(allFilms.slice(enriched.length).map(function (f) { return Object.assign({}, f); }));
-            saveEnriched(username, finalList, !cancelRequested && enriched.length === allFilms.length);
+            const fullyEnrichedCount = enriched.filter(isEnriched).length;
+            const isComplete = !cancelRequested && fullyEnrichedCount === allFilms.length;
+            saveEnriched(username, enriched, isComplete);
 
             if (cancelRequested) {
-                appendLog('CANCELLED. ' + enriched.length + '/' + allFilms.length + ' FILMS ENRICHED, REST CACHED AS TITLE-ONLY.', 'text-error');
+                appendLog('CANCELLED. ' + doneCount + '/' + totalToFetch + ' THIS RUN · ' + fullyEnrichedCount + '/' + allFilms.length + ' TOTAL ENRICHED.', 'text-error');
                 statusBadge.textContent = 'Status: Cancelled';
             } else {
-                appendLog('PHASE 2 COMPLETE. OK:' + okCount + ' FAIL:' + failCount + '.', 'text-tertiary');
+                appendLog('PHASE 2 COMPLETE. THIS RUN: OK ' + okCount + ' / FAIL ' + failCount + ' · TOTAL ENRICHED: ' + fullyEnrichedCount + '/' + allFilms.length + '.', 'text-tertiary');
+                if (failCount > 0) appendLog('// ' + failCount + ' FILMS FAILED — RE-RUN SYNC TO RETRY THEM.', 'text-on-surface-variant');
                 appendLog('DEEP SYNC COMPLETE. SHELF PICK IS READY.', 'text-tertiary');
                 statusBadge.textContent = 'Status: Online';
                 statusBadge.classList.remove('blink-text');

@@ -268,16 +268,39 @@ From Your Watchlist
 </nav>
 <script>
 (function () {
-    const PICK_COUNT = 4;
+    const PICK_COUNT = 8;
 
     // Genre→mood mapping. Letterboxd has no mood metadata, so we coerce
-    // genres into the four buckets the UI exposes. Films with multiple
-    // genres can satisfy multiple moods.
-    const MOOD_BY_GENRE = {
-        comedy: 'funny', stand_up: 'funny',
-        horror: 'intense', thriller: 'intense', action: 'intense', war: 'intense', crime: 'intense', mystery: 'intense',
-        drama: 'chill', romance: 'chill', music: 'chill', family: 'chill', tv_movie: 'chill', history: 'chill',
-        documentary: 'atmospheric', 'science-fiction': 'atmospheric', fantasy: 'atmospheric', animation: 'atmospheric', adventure: 'atmospheric', western: 'atmospheric'
+    // genres into the four buckets the UI exposes. A genre can map to
+    // multiple moods — e.g. comedy reads as both funny and chill, sci-fi
+    // is atmospheric AND can be intense. A film matches a mood if any of
+    // its genres tag that mood.
+    //
+    // Tuning notes from earlier feedback: drama is NOT chill (drama
+    // tends to be heavy/emotional), so it goes to atmospheric/intense.
+    // Animation is mood-bimodal (kids' films vs. adult arthouse) so
+    // we tag it both chill and atmospheric.
+    const MOODS_BY_GENRE = {
+        comedy:               ['funny', 'chill'],
+        'stand-up':           ['funny'],
+        romance:              ['chill', 'funny'],
+        family:               ['chill'],
+        music:                ['chill'],
+        'tv-movie':           ['chill'],
+        action:               ['intense'],
+        thriller:             ['intense', 'atmospheric'],
+        horror:               ['intense', 'atmospheric'],
+        war:                  ['intense'],
+        crime:                ['intense'],
+        mystery:              ['atmospheric', 'intense'],
+        drama:                ['atmospheric', 'intense'],
+        'science-fiction':    ['atmospheric'],
+        fantasy:              ['atmospheric'],
+        animation:            ['atmospheric', 'chill'],
+        documentary:          ['atmospheric'],
+        history:              ['atmospheric'],
+        adventure:            ['atmospheric'],
+        western:              ['atmospheric']
     };
 
     const watchlistStatus = document.getElementById('watchlist-status');
@@ -345,9 +368,12 @@ From Your Watchlist
     }
 
     function moodsOfFilm(film) {
-        return (film.genres || [])
-            .map(function (g) { return MOOD_BY_GENRE[g.replace(/-/g, '_')] || MOOD_BY_GENRE[g]; })
-            .filter(Boolean);
+        const out = new Set();
+        (film.genres || []).forEach(function (g) {
+            const moods = MOODS_BY_GENRE[g] || MOODS_BY_GENRE[g.replace(/_/g, '-')] || [];
+            moods.forEach(function (m) { out.add(m); });
+        });
+        return Array.from(out);
     }
 
     function matchesMood(film, moods) {
