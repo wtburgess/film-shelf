@@ -7,8 +7,8 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
@@ -133,11 +133,9 @@
       min-height: max(884px, 100dvh);
     }
   </style>
-  </head>
+</head>
 <body class="bg-background text-on-background font-body-md min-h-screen flex flex-col relative pb-24">
-<!-- Global Scanline Overlay -->
 <div class="scanlines fixed inset-0 z-50 pointer-events-none"></div>
-<!-- Header -->
 <header class="w-full bg-surface-container-high border-b-2 border-outline sticky top-0 z-40">
 <div class="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-3 flex flex-col gap-1">
 <div class="flex justify-between items-center">
@@ -147,40 +145,34 @@
 <p class="font-label-mono text-on-surface-variant uppercase text-[10px] tracking-widest">&gt;&gt; ME // SYNC</p>
 </div>
 </header>
-<!-- Main Content -->
 <main class="flex-1 w-full max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-8 flex flex-col gap-8 z-10 relative">
-<!-- Account Status Badge -->
 <div class="self-start inline-flex items-center gap-2 bg-secondary-container px-3 py-1 -rotate-2 transform shadow-[2px_2px_0px_#131313] border border-outline z-20">
 <span class="material-symbols-outlined text-on-secondary-container text-[16px]" style="font-variation-settings: 'FILL' 1;">person</span>
-<span class="text-on-secondary-container font-label-mono uppercase">User_001_Active</span>
+<span id="account-badge" class="text-on-secondary-container font-label-mono uppercase">User_001_Active</span>
 </div>
-<!-- Sync Mode Hardware Interface -->
 <section class="bg-surface border-2 border-outline p-1 relative">
 <div class="absolute -top-3 left-4 bg-on-surface text-surface px-2 py-0.5 font-label-mono uppercase flex items-center gap-2">
 <span class="material-symbols-outlined text-[14px]">sync</span>
-                Sync Mode Interface
-            </div>
+Sync Mode Interface
+</div>
 <div class="bg-surface-container border border-outline-variant p-6 mt-4 flex flex-col gap-6">
-<!-- Letterboxd URL Input -->
 <div class="flex flex-col gap-2 w-full max-w-md">
 <label class="text-on-surface-variant font-label-mono uppercase flex items-center gap-2">
 <span class="w-2 h-2 bg-secondary-container inline-block"></span>
-                        Letterboxd Source URL
-                    </label>
+Letterboxd Source URL
+</label>
 <div class="relative">
-<input class="w-full bg-background border-2 border-secondary-container text-tertiary font-body-md p-3 focus:outline-none focus:ring-0 focus:border-tertiary transition-colors placeholder:text-outline-variant placeholder:font-label-mono uppercase" placeholder="HTTPS://LETTERBOXD.COM/USERNAME" type="text" value="letterboxd.com/demo_vhs"/>
+<input id="letterboxd-url" class="w-full bg-background border-2 border-secondary-container text-tertiary font-body-md p-3 focus:outline-none focus:ring-0 focus:border-tertiary transition-colors placeholder:text-outline-variant placeholder:font-label-mono uppercase" placeholder="HTTPS://LETTERBOXD.COM/USERNAME" type="text" value="letterboxd.com/wtburgess"/>
 <div class="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-4 bg-tertiary animate-pulse"></div>
 </div>
 <p class="text-outline text-[10px] font-label-mono mt-1">// ENTER VALID URI FOR TAPE EXTRACTION</p>
 </div>
-<!-- Action Button -->
-<button class="w-full max-w-md bg-primary-container hover:bg-inverse-primary text-on-primary-container font-headline-md uppercase py-4 border-b-4 border-on-primary-fixed-variant active:border-b-0 active:translate-y-[4px] transition-all flex items-center justify-center gap-3">
+<button id="sync-btn" class="w-full max-w-md bg-primary-container hover:bg-inverse-primary text-on-primary-container font-headline-md uppercase py-4 border-b-4 border-on-primary-fixed-variant active:border-b-0 active:translate-y-[4px] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:border-b-4">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">play_circle</span>
-                    Initialize Sync
-                </button>
+Initialize Sync
+</button>
 </div>
 </section>
-<!-- Terminal Output (LOG.TXT) -->
 <section class="bg-surface-container-lowest border-2 border-outline flex flex-col">
 <div class="bg-surface-container-highest border-b border-outline px-4 py-2 flex justify-between items-center">
 <div class="flex items-center gap-4">
@@ -191,31 +183,21 @@
 <span class="w-3 h-3 bg-primary-container rounded-full opacity-30"></span>
 </div>
 </div>
-<span class="font-label-mono text-tertiary text-[10px] uppercase blink-text">Status: Processing</span>
+<span id="status-badge" class="font-label-mono text-tertiary text-[10px] uppercase blink-text">Status: Ready</span>
 </div>
-<div class="p-4 h-64 overflow-y-auto terminal-scroll font-label-mono text-[14px] leading-relaxed">
+<div id="log-container" class="p-4 h-64 overflow-y-auto terminal-scroll font-label-mono text-[14px] leading-relaxed">
 <div class="text-outline-variant mb-4">
-                    FILM SHELF OS v1.9.94<br/>
-                    MEMORY: 640K OK<br/>
-                    A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
-                </div>
-<div class="text-secondary mb-1">&gt; INITIALIZING SECURE CONNECTION TO TAPE ARCHIVE...</div>
-<div class="text-secondary mb-1">&gt; HANDSHAKE SUCCESSFUL. NODE: US-EAST-09.</div>
-<div class="text-secondary mb-1">&gt; TARGET ACCOUNT LOCATED: @DEMO_VHS</div>
-<div class="text-tertiary mb-1">&gt; SCANNING DIARY ENTRIES... [||||||||||  ] 45%</div>
-<div class="text-on-surface mb-1">&gt; FOUND 1,402 WATCHED FILMS.</div>
-<div class="text-on-surface mb-1">&gt; FOUND 312 WATCHLIST ENTRIES.</div>
-<div class="text-secondary mb-1">&gt; INITIATING METADATA SCRAPE PROTOCOL...</div>
-<div class="text-error mb-1">&gt; WARN: MISSING POSTER ART FOR ID#9932 (THE_CABLE_GUY.DAT)</div>
-<div class="text-error mb-1">&gt; WARN: RESOLUTION DOWNGRADE REQUIRED FOR ID#4011.</div>
-<div class="text-tertiary mb-1">&gt; ALLOCATING SHELF SPACE...</div>
+FILM SHELF OS v1.9.94<br/>
+MEMORY: 640K OK<br/>
+A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
+</div>
+<div class="text-secondary mb-1">&gt; AWAITING INPUT. ENTER LETTERBOXD URL TO BEGIN.</div>
 <div class="text-secondary flex items-center gap-2 mt-2">
-                    &gt; <span class="w-2 h-4 bg-tertiary animate-pulse inline-block"></span>
+&gt; <span class="w-2 h-4 bg-tertiary animate-pulse inline-block"></span>
 </div>
 </div>
 </section>
 </main>
-<!-- BottomNavBar -->
 <nav class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-high border-t-2 border-outline">
 <div class="max-w-container-max mx-auto flex gap-2 px-4 pb-3 pt-2">
 <a class="flex flex-1 flex-col items-center justify-end gap-1 text-on-surface-variant hover:text-secondary transition-colors" href="../shelf-pick/">
@@ -238,4 +220,206 @@
 </a>
 </div>
 </nav>
+<script>
+(function () {
+    const btn = document.getElementById('sync-btn');
+    const input = document.getElementById('letterboxd-url');
+    const logContainer = document.getElementById('log-container');
+    const statusBadge = document.getElementById('status-badge');
+    const accountBadge = document.getElementById('account-badge');
+
+    // Free CORS proxies tried in order. Each is unreliable on its own;
+    // the chain gives us a usable success rate. Each builder takes the
+    // raw target URL and returns the proxied URL.
+    const PROXIES = [
+        function (u) { return 'https://api.cors.lol/?url=' + encodeURIComponent(u); },
+        function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+        function (u) { return 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u); }
+    ];
+
+    function extractUsername(value) {
+        value = value.trim().replace(/\/+$/, '');
+        const match = value.match(/letterboxd\.com\/([a-z0-9_-]+)/i);
+        if (match) return match[1].toLowerCase();
+        if (/^[a-z0-9_-]+$/i.test(value)) return value.toLowerCase();
+        return null;
+    }
+
+    function appendLog(text, colorClass) {
+        const cursor = logContainer.querySelector('.log-cursor');
+        if (cursor) cursor.remove();
+        const line = document.createElement('div');
+        line.className = (colorClass || 'text-secondary') + ' mb-1';
+        line.textContent = '> ' + text;
+        logContainer.appendChild(line);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function appendCursor(colorClass) {
+        const cursor = logContainer.querySelector('.log-cursor');
+        if (cursor) cursor.remove();
+        const el = document.createElement('div');
+        el.className = 'text-secondary flex items-center gap-2 mt-2 log-cursor';
+        el.innerHTML = '> <span class="w-2 h-4 ' + (colorClass || 'bg-tertiary') + ' animate-pulse inline-block"></span>';
+        logContainer.appendChild(el);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function resetLog() {
+        logContainer.innerHTML = '<div class="text-outline-variant mb-4">FILM SHELF OS v1.9.94<br/>MEMORY: 640K OK<br/>A:\\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD</div>';
+    }
+
+    function delay(ms) {
+        return new Promise(function (r) { setTimeout(r, ms); });
+    }
+
+    // Try each proxy in turn. Fail only after all of them have failed.
+    // Treat tiny / non-matching responses as failures so we fall through
+    // when a proxy returns its own homepage or a rate-limit message.
+    async function fetchViaProxy(targetUrl, validate) {
+        let lastErr;
+        for (let i = 0; i < PROXIES.length; i++) {
+            const proxyUrl = PROXIES[i](targetUrl);
+            try {
+                const res = await fetch(proxyUrl);
+                if (!res.ok) { lastErr = new Error('HTTP ' + res.status); continue; }
+                const text = await res.text();
+                if (validate && !validate(text)) {
+                    lastErr = new Error('INVALID PAYLOAD FROM PROXY ' + (i + 1));
+                    continue;
+                }
+                return text;
+            } catch (e) {
+                lastErr = e;
+            }
+        }
+        throw lastErr || new Error('ALL PROXIES FAILED');
+    }
+
+    function parseRSS(xml) {
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        if (doc.querySelector('parsererror')) throw new Error('MALFORMED RSS FEED');
+        return Array.from(doc.querySelectorAll('item'));
+    }
+
+    function extractTitle(item) {
+        const raw = (item.querySelector('title') && item.querySelector('title').textContent) || 'UNKNOWN';
+        return raw.replace(/,\s*\d{4}$/, '').trim();
+    }
+
+    // Letterboxd doesn't expose a watchlist RSS feed. The watchlist
+    // landing page does include a `data-num-entries="N"` attribute on
+    // the list container, so we scrape that out of the HTML.
+    function extractWatchlistCount(html) {
+        const m = html.match(/data-num-entries="(\d+)"/);
+        return m ? parseInt(m[1], 10) : null;
+    }
+
+    async function runSync(username) {
+        resetLog();
+        statusBadge.textContent = 'Status: Processing';
+        statusBadge.classList.add('blink-text');
+        btn.disabled = true;
+
+        try {
+            appendLog('INITIALIZING SECURE CONNECTION TO TAPE ARCHIVE...');
+            await delay(400);
+            appendLog('HANDSHAKE SUCCESSFUL. NODE: US-EAST-09.');
+            await delay(300);
+            appendLog('LOCATING ACCOUNT: @' + username.toUpperCase() + '...');
+
+            // Diary RSS — the canonical signal that a Letterboxd account exists.
+            let diaryItems;
+            try {
+                const diaryXml = await fetchViaProxy(
+                    'https://letterboxd.com/' + username + '/rss/',
+                    function (t) { return t.indexOf('<rss') !== -1 || t.indexOf('<?xml') !== -1; }
+                );
+                diaryItems = parseRSS(diaryXml);
+            } catch (e) {
+                throw new Error('ACCOUNT NOT FOUND OR FEED UNREACHABLE');
+            }
+
+            appendLog('TARGET ACCOUNT LOCATED: @' + username.toUpperCase());
+            await delay(300);
+            appendLog('SCANNING DIARY ENTRIES... [||||||||||||] 100%', 'text-tertiary');
+            await delay(200);
+            appendLog('FOUND ' + diaryItems.length + ' RECENT DIARY ENTRIES.', 'text-on-surface');
+
+            // Watchlist count — best-effort. Letterboxd has no RSS endpoint
+            // for it, so we scrape the HTML page. If every proxy is rate-
+            // limited or down, we degrade gracefully instead of aborting.
+            let watchlistCount = null;
+            try {
+                const watchlistHtml = await fetchViaProxy(
+                    'https://letterboxd.com/' + username + '/watchlist/',
+                    function (t) { return t.indexOf('data-num-entries') !== -1; }
+                );
+                watchlistCount = extractWatchlistCount(watchlistHtml);
+            } catch (e) { /* swallow — handled below */ }
+
+            if (watchlistCount !== null) {
+                appendLog('FOUND ' + watchlistCount + ' WATCHLIST ENTRIES.', 'text-on-surface');
+            } else {
+                appendLog('WATCHLIST: UNAVAILABLE (PROXY THROTTLED).', 'text-error');
+            }
+            await delay(200);
+            appendLog('INITIATING METADATA SCRAPE PROTOCOL...');
+            await delay(300);
+
+            const recent = diaryItems.slice(0, 4);
+            for (const item of recent) {
+                const title = extractTitle(item).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '');
+                appendLog('INDEXED: ' + title + '.DAT', 'text-on-surface');
+                await delay(120);
+            }
+
+            appendLog('ALLOCATING SHELF SPACE...', 'text-tertiary');
+            await delay(300);
+            appendLog('SYNC COMPLETE. TAPE ARCHIVE READY.', 'text-tertiary');
+
+            statusBadge.textContent = 'Status: Online';
+            statusBadge.classList.remove('blink-text');
+            accountBadge.textContent = '@' + username.toUpperCase();
+
+            try {
+                localStorage.setItem('filmshelf:letterboxd_user', username);
+            } catch (e) { /* storage disabled — non-fatal */ }
+
+            appendCursor('bg-tertiary');
+        } catch (err) {
+            appendLog('ERROR: ' + (err.message || 'CONNECTION FAILED'), 'text-error');
+            appendLog('SYNC ABORTED. CHECK URL AND RETRY.', 'text-error');
+            statusBadge.textContent = 'Status: Error';
+            appendCursor('bg-primary-container');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    // Restore previously synced account, if any.
+    try {
+        const saved = localStorage.getItem('filmshelf:letterboxd_user');
+        if (saved) {
+            input.value = 'letterboxd.com/' + saved;
+            accountBadge.textContent = '@' + saved.toUpperCase();
+        }
+    } catch (e) { /* storage disabled — non-fatal */ }
+
+    btn.addEventListener('click', function () {
+        const username = extractUsername(input.value);
+        if (!username) {
+            resetLog();
+            appendLog('ERROR: INVALID URL. USE LETTERBOXD.COM/USERNAME', 'text-error');
+            appendCursor('bg-primary-container');
+            return;
+        }
+        runSync(username);
+    });
+
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') btn.click();
+    });
+})();
+</script>
 </body></html>
