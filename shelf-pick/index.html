@@ -274,28 +274,20 @@ Runtime
 <div class="flex flex-col gap-3">
 <label class="font-label-mono uppercase font-bold text-on-surface-variant flex items-center gap-2">
 <span class="w-2 h-2 bg-tertiary inline-block"></span>
-Decade
+Release Date
 </label>
 <div class="flex flex-wrap gap-2" data-filter-group="decade">
 <div>
-<input class="chip-input sr-only" id="dc-70" name="decade" type="checkbox" value="70s"/>
-<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-70">70s</label>
+<input class="chip-input sr-only" id="dc-recent" name="decade" type="checkbox" value="recent"/>
+<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-recent">Recent (2010+)</label>
 </div>
 <div>
-<input class="chip-input sr-only" id="dc-80" name="decade" type="checkbox" value="80s"/>
-<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-80">80s</label>
+<input class="chip-input sr-only" id="dc-mid" name="decade" type="checkbox" value="mid"/>
+<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-mid">Modern (1970–2009)</label>
 </div>
 <div>
-<input class="chip-input sr-only" id="dc-90" name="decade" type="checkbox" value="90s"/>
-<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-90">90s</label>
-</div>
-<div>
-<input class="chip-input sr-only" id="dc-00" name="decade" type="checkbox" value="00s"/>
-<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-00">2000s</label>
-</div>
-<div>
-<input class="chip-input sr-only" id="dc-10" name="decade" type="checkbox" value="10s+"/>
-<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-10">2010s+</label>
+<input class="chip-input sr-only" id="dc-old" name="decade" type="checkbox" value="old"/>
+<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="dc-old">Old (pre-1970)</label>
 </div>
 </div>
 </div>
@@ -423,6 +415,27 @@ From Your Watchlist
         } catch (e) { return null; }
     }
 
+    // Cross-device restore: when this page loads without a local
+    // cache, try fetching the cloud copy for the saved username so
+    // Shelf Pick "just works" on a fresh browser as long as someone,
+    // somewhere, has synced this account before.
+    async function tryCloudRestore() {
+        const username = getUsername();
+        if (!username) return false;
+        const local = getEnrichedWatchlist();
+        if (local && local.username === username && local.films && local.films.length) return false;
+        try {
+            const res = await fetch('/api/cache?user=' + encodeURIComponent(username));
+            if (!res.ok) return false;
+            const payload = await res.json();
+            if (payload && payload.films && payload.username) {
+                localStorage.setItem('filmshelf:enriched_watchlist', JSON.stringify(payload));
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
     const vibeSlider = document.getElementById('vibe-slider');
     const complexitySlider = document.getElementById('complexity-slider');
     const currentVibeEl = document.getElementById('current-vibe');
@@ -457,18 +470,20 @@ From Your Watchlist
         parts.push('VIBE: ' + vibeWord(f.vibe));
         parts.push('CPLX: ' + complexityWord(f.complexity));
         if (f.runtimes.length) parts.push('RT: ' + f.runtimes.join('+').toUpperCase());
-        if (f.decades.length) parts.push('DEC: ' + f.decades.join('+').toUpperCase());
+        if (f.decades.length) parts.push('ERA: ' + f.decades.join('+').toUpperCase());
         filterSummary.textContent = '// ' + parts.join(' · ');
     }
 
+    // Three coarse era buckets — finer-grained decades didn't match how
+    // people actually think about "old vs. new" cinema.
+    //   recent: 2010+
+    //   mid:    1970–2009  (most of the canon)
+    //   old:    pre-1970
     function decadeOf(year) {
         if (year == null) return null;
-        if (year >= 2010) return '10s+';
-        if (year >= 2000) return '00s';
-        if (year >= 1990) return '90s';
-        if (year >= 1980) return '80s';
-        if (year >= 1970) return '70s';
-        return null;
+        if (year >= 2010) return 'recent';
+        if (year >= 1970) return 'mid';
+        return 'old';
     }
 
     function matchesDecade(film, decades) {
@@ -705,10 +720,13 @@ From Your Watchlist
             const tag = cache.complete ? 'COMPLETE' : (enrichedCount + '/' + cache.films.length + ' ENRICHED');
             watchlistStatus.textContent = 'WATCHLIST: ' + cache.films.length + ' · ' + tag;
         } else {
-            watchlistStatus.textContent = 'WATCHLIST: SYNC REQUIRED';
+            watchlistStatus.textContent = 'WATCHLIST: CHECKING CLOUD...';
         }
     }
     initOSD();
+    // Cloud restore in the background — if it succeeds, refresh the
+    // OSD so the user sees their data appear without a manual reload.
+    tryCloudRestore().then(function (restored) { if (restored) initOSD(); });
 
     document.querySelectorAll('.chip-input').forEach(function (input) {
         input.addEventListener('change', updateFilterSummary);
