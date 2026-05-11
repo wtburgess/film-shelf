@@ -259,15 +259,15 @@ Runtime
 <div class="flex flex-wrap gap-2" data-filter-group="runtime">
 <div>
 <input class="chip-input sr-only" id="rt-short" name="runtime" type="checkbox" value="short"/>
-<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-short">Short &lt;90</label>
+<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-short">Short &lt;100</label>
 </div>
 <div>
 <input class="chip-input sr-only" id="rt-med" name="runtime" type="checkbox" value="medium"/>
-<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-med">Medium 90-120</label>
+<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-med">Medium 100-130</label>
 </div>
 <div>
 <input class="chip-input sr-only" id="rt-long" name="runtime" type="checkbox" value="long"/>
-<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-long">Long &gt;120</label>
+<label class="chip-label inline-flex items-center px-3 py-2 border-2 border-secondary-container bg-background text-on-surface font-label-mono uppercase text-[11px] tracking-widest cursor-pointer hover:border-tertiary transition-colors" for="rt-long">Long 130+</label>
 </div>
 </div>
 </div>
@@ -473,9 +473,9 @@ From Your Watchlist
         if (!runtimes.length) return true;
         const r = film.runtime;
         if (r == null) return false;
-        if (runtimes.indexOf('short') !== -1 && r < 90) return true;
-        if (runtimes.indexOf('medium') !== -1 && r >= 90 && r <= 120) return true;
-        if (runtimes.indexOf('long') !== -1 && r > 120) return true;
+        if (runtimes.indexOf('short') !== -1 && r < 100) return true;
+        if (runtimes.indexOf('medium') !== -1 && r >= 100 && r < 130) return true;
+        if (runtimes.indexOf('long') !== -1 && r >= 130) return true;
         return false;
     }
 
