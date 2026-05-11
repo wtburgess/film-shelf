@@ -320,6 +320,13 @@ From Your Watchlist
 <p class="font-label-mono text-on-surface-variant uppercase tracking-widest">// NO PICKS YET. SET YOUR FILTERS AND HIT THE BIG RED BUTTON.</p>
 </div>
 </div>
+<div id="load-more-wrap" class="hidden justify-center mt-gutter">
+<button id="load-more-btn" class="bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-headline-md uppercase py-3 px-8 border-b-4 border-outline btn-brutal flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined">expand_more</span>
+<span>Load More</span>
+<span id="load-more-remaining" class="font-label-mono text-[11px] tracking-widest text-on-surface-variant"></span>
+</button>
+</div>
 </section>
 </main>
 <nav class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-high border-t-2 border-outline">
@@ -531,10 +538,15 @@ From Your Watchlist
         wrap.className = 'bg-surface-container-lowest border-2 border-error border-dashed p-6 col-span-full text-center';
         wrap.innerHTML = '<p class="font-label-mono text-error uppercase tracking-widest">// ' + message + '</p>';
         cardsGrid.appendChild(wrap);
+        // Empty result → no deck to page through.
+        remainingDeck = [];
+        totalMatched = 0;
+        loadMoreWrap.classList.add('hidden');
+        loadMoreWrap.classList.remove('flex');
     }
 
-    function renderCards(films) {
-        cardsGrid.innerHTML = '';
+    function renderCards(films, opts) {
+        if (!opts || !opts.append) cardsGrid.innerHTML = '';
         films.forEach(function (f) {
             const isTopPick = f.rating != null && f.rating >= 4.0;
             const card = document.createElement('article');
@@ -598,10 +610,40 @@ From Your Watchlist
     function escapeAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
     function escapeText(s) { return String(s).replace(/[&<>]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]; }); }
 
+    const loadMoreWrap = document.getElementById('load-more-wrap');
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    const loadMoreRemaining = document.getElementById('load-more-remaining');
+    // Deck of currently-eligible films left to reveal via Load More.
+    // Reset whenever the user clicks "Pick from Shelf"; consumed in
+    // batches of PICK_COUNT by loadMore().
+    let remainingDeck = [];
+    let totalMatched = 0;
+
+    function showLoadMore() {
+        if (remainingDeck.length > 0) {
+            loadMoreWrap.classList.remove('hidden');
+            loadMoreWrap.classList.add('flex');
+            loadMoreRemaining.textContent = '· ' + remainingDeck.length + ' LEFT';
+        } else {
+            loadMoreWrap.classList.add('hidden');
+            loadMoreWrap.classList.remove('flex');
+        }
+    }
+
+    function loadMore() {
+        if (!remainingDeck.length) return;
+        const next = remainingDeck.splice(0, PICK_COUNT);
+        renderCards(next, { append: true });
+        const shown = totalMatched - remainingDeck.length;
+        matchCount.textContent = '// ' + shown + ' OF ' + totalMatched + ' MATCHES SHOWN';
+        showLoadMore();
+    }
+
     // handlePick: filters the cached watchlist by Vibe + Complexity +
     // (legacy) Runtime + Decade, then samples up to PICK_COUNT films.
     // A slider at 0 means "ignore this filter" — that's how a real DB
-    // query would treat it.
+    // query would treat it. The remainder of the matched set is left
+    // in `remainingDeck` so Load More can keep revealing batches.
     function pickFromShelf() {
         const username = getUsername();
         if (!username) {
@@ -637,11 +679,18 @@ From Your Watchlist
         if (!matched.length) {
             renderEmpty('NOTHING IN YOUR WATCHLIST MATCHES THIS VIBE. NUDGE A SLIDER.');
             matchCount.textContent = '// 0 OF ' + cache.films.length + ' ENTRIES MATCH SELECTION';
+            remainingDeck = [];
+            totalMatched = 0;
+            showLoadMore();
             return;
         }
 
-        const picks = shuffle(matched).slice(0, PICK_COUNT);
+        const shuffled = shuffle(matched);
+        const picks = shuffled.slice(0, PICK_COUNT);
+        remainingDeck = shuffled.slice(PICK_COUNT);
+        totalMatched = matched.length;
         renderCards(picks);
+        showLoadMore();
         const cacheNote = cache.complete ? '' : ' (PARTIAL CACHE — RE-SYNC TO COMPLETE)';
         matchCount.textContent = '// ' + picks.length + ' OF ' + matched.length + ' MATCHES SHOWN · ' + cache.films.length + ' TOTAL' + cacheNote;
     }
@@ -667,6 +716,7 @@ From Your Watchlist
     vibeSlider.addEventListener('input', updateFilterSummary);
     complexitySlider.addEventListener('input', updateFilterSummary);
     pickBtn.addEventListener('click', pickFromShelf);
+    loadMoreBtn.addEventListener('click', loadMore);
     updateFilterSummary();
 })();
 </script>
