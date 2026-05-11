@@ -431,15 +431,48 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
     }
 
     function saveEnriched(username, films, complete) {
+        const payload = {
+            username: username,
+            ts: Date.now(),
+            complete: !!complete,
+            films: films
+        };
         try {
-            localStorage.setItem('filmshelf:enriched_watchlist', JSON.stringify({
-                username: username,
-                ts: Date.now(),
-                complete: !!complete,
-                films: films
-            }));
+            localStorage.setItem('filmshelf:enriched_watchlist', JSON.stringify(payload));
         } catch (e) {
             appendLog('WARN: LOCALSTORAGE WRITE FAILED (' + (e.message || 'QUOTA?') + ')', 'text-error');
+        }
+        return payload;
+    }
+
+    // Pushes the enriched watchlist to the cloud KV. Fails silently —
+    // the local cache is still usable on this device. On localhost the
+    // /api/cache endpoint 404s (no serverless runtime), so the silent
+    // failure is the correct dev-time behaviour.
+    async function cloudPush(payload) {
+        try {
+            const res = await fetch('/api/cache?user=' + encodeURIComponent(payload.username), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) return { ok: true };
+            const err = await res.json().catch(function () { return {}; });
+            return { ok: false, status: res.status, reason: err.error || ('HTTP ' + res.status) };
+        } catch (e) {
+            return { ok: false, reason: e.message || 'NET' };
+        }
+    }
+
+    // Pulls the cloud cache for a username. Returns the parsed payload
+    // or null on miss / not-configured / network error.
+    async function cloudPull(username) {
+        try {
+            const res = await fetch('/api/cache?user=' + encodeURIComponent(username));
+            if (!res.ok) return null;
+            return await res.json();
+        } catch (e) {
+            return null;
         }
     }
 
@@ -636,7 +669,7 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
 
             const fullyEnrichedCount = enriched.filter(isEnriched).length;
             const isComplete = !cancelRequested && fullyEnrichedCount === allFilms.length;
-            saveEnriched(username, enriched, isComplete);
+            const savedPayload = saveEnriched(username, enriched, isComplete);
 
             if (cancelRequested) {
                 appendLog('CANCELLED. ' + doneCount + '/' + totalToFetch + ' THIS RUN · ' + fullyEnrichedCount + '/' + allFilms.length + ' TOTAL ENRICHED.', 'text-error');
@@ -647,6 +680,17 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
                 appendLog('DEEP SYNC COMPLETE. SHELF PICK IS READY.', 'text-tertiary');
                 statusBadge.textContent = 'Status: Online';
                 statusBadge.classList.remove('blink-text');
+            }
+
+            // Push to cloud so other devices / browsers can restore by
+            // just typing the username. Failure is non-fatal — local
+            // cache still works.
+            appendLog('PUSHING TO CLOUD CACHE...', 'text-on-surface-variant');
+            const pushed = await cloudPush(savedPayload);
+            if (pushed.ok) {
+                appendLog('CLOUD SYNC OK. ANY DEVICE CAN RESTORE @' + username.toUpperCase() + ' WITHOUT RE-SYNCING.', 'text-tertiary');
+            } else {
+                appendLog('CLOUD SYNC SKIPPED (' + pushed.reason + '). LOCAL CACHE ONLY.', 'text-on-surface-variant');
             }
 
             accountBadge.textContent = '@' + username.toUpperCase();
@@ -663,23 +707,54 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
         }
     }
 
-    // Restore previously synced account, if any.
-    try {
-        const saved = localStorage.getItem('filmshelf:letterboxd_user');
+    // Restore previously synced account, then try a cloud pull to see
+    // if a newer (or any) cached watchlist exists for that username.
+    // If the cloud copy is newer than local, we adopt it — that's how
+    // "type your username on a new device and it just works."
+    async function tryRestoreOnLoad() {
+        let saved = null;
+        try { saved = localStorage.getItem('filmshelf:letterboxd_user'); } catch (e) {}
         if (saved) {
             input.value = 'letterboxd.com/' + saved;
             accountBadge.textContent = '@' + saved.toUpperCase();
         }
-        const enriched = localStorage.getItem('filmshelf:enriched_watchlist');
-        if (enriched) {
-            try {
-                const parsed = JSON.parse(enriched);
-                if (parsed && parsed.films) {
-                    appendLog('CACHED: ' + parsed.films.length + ' FILMS' + (parsed.complete ? ' (COMPLETE)' : ' (PARTIAL)'), 'text-on-surface');
-                }
-            } catch (e) {}
+        let localPayload = null;
+        try {
+            const raw = localStorage.getItem('filmshelf:enriched_watchlist');
+            if (raw) localPayload = JSON.parse(raw);
+        } catch (e) {}
+        if (localPayload && localPayload.films) {
+            appendLog('LOCAL CACHE: ' + localPayload.films.length + ' FILMS' + (localPayload.complete ? ' (COMPLETE)' : ' (PARTIAL)'), 'text-on-surface');
         }
-    } catch (e) { /* storage disabled — non-fatal */ }
+
+        const user = saved || (localPayload && localPayload.username);
+        if (!user) return;
+
+        appendLog('CHECKING CLOUD CACHE FOR @' + user.toUpperCase() + '...', 'text-on-surface-variant');
+        const cloudPayload = await cloudPull(user);
+        if (!cloudPayload || !cloudPayload.films) {
+            appendLog('NO CLOUD CACHE YET. RUN SYNC TO POPULATE.', 'text-on-surface-variant');
+            return;
+        }
+
+        const localTs = localPayload && localPayload.ts || 0;
+        const cloudTs = cloudPayload.ts || 0;
+        if (cloudTs > localTs) {
+            // Adopt cloud version — newer or first-time pull on this device.
+            try {
+                localStorage.setItem('filmshelf:enriched_watchlist', JSON.stringify(cloudPayload));
+                localStorage.setItem('filmshelf:letterboxd_user', cloudPayload.username);
+            } catch (e) {}
+            input.value = 'letterboxd.com/' + cloudPayload.username;
+            accountBadge.textContent = '@' + cloudPayload.username.toUpperCase();
+            appendLog('RESTORED FROM CLOUD: ' + cloudPayload.films.length + ' FILMS' + (cloudPayload.complete ? ' (COMPLETE)' : ' (PARTIAL)') + '.', 'text-tertiary');
+            statusBadge.textContent = 'Status: Online';
+            statusBadge.classList.remove('blink-text');
+        } else {
+            appendLog('CLOUD CACHE IS OLDER THAN LOCAL — KEEPING LOCAL.', 'text-on-surface-variant');
+        }
+    }
+    tryRestoreOnLoad();
 
     btn.addEventListener('click', function () {
         const username = extractUsername(input.value);
