@@ -261,19 +261,27 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
     const progressEta = document.getElementById('progress-eta');
     const baseTitle = document.title;
 
-    // allorigins is the most permissive of the three free proxies; we
-    // lead with it so we don't burn cors.lol's per-IP rate limit on the
-    // first request. codetabs is last because it returns HTTP 200 with
-    // a tiny "error code: 1015" body when throttled.
+    // First-party proxy via Vercel Edge (api/proxy.js) caches every
+    // letterboxd response at the edge for ~24h and avoids per-IP rate
+    // limits entirely. In production this is by far the fastest path.
+    // In local dev (python -m http.server) the /api route 404s, so we
+    // fall through to the three free CORS proxies. They are unreliable
+    // individually — allorigins times out, cors.lol rate-limits per-IP
+    // at ~1 req/sec, codetabs returns HTTP 200 with an "error code:
+    // 1015" body when throttled — so we rotate the lead proxy per call.
     const PROXIES = [
-        { name: 'allorigins', build: function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); } },
+        { name: 'vercel',     build: function (u) { return '/api/proxy?url=' + encodeURIComponent(u); } },
         { name: 'cors.lol',   build: function (u) { return 'https://api.cors.lol/?url=' + encodeURIComponent(u); } },
+        { name: 'allorigins', build: function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); } },
         { name: 'codetabs',   build: function (u) { return 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u); } }
     ];
     const WATCHLIST_PER_PAGE = 28;
     const PROXY_TIMEOUT_MS = 8000;
-    const ENRICH_CONCURRENCY = 3;    // parallel detail-fetch workers — 3 plays well with the 3-proxy chain without tripping per-IP limits
-    const PERSIST_EVERY = 10;        // save progress every N completions (counted across workers)
+    // Six workers is safe because the Vercel edge proxy doesn't have
+    // a per-IP limit and serves most fetches from cache anyway.
+    const ENRICH_CONCURRENCY = 6;
+    const PERSIST_EVERY = 10;
+    const RETRY_DELAY_MS = 2500;     // wait before one retry on full chain failure
 
     let cancelRequested = false;
 
@@ -313,11 +321,18 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
         return new Promise(function (r) { setTimeout(r, ms); });
     }
 
+    // Rotating offset for which proxy to try first. Without this, every
+    // fetch starts at PROXIES[0] and we hammer that proxy under load.
+    // Rotating means each call leads with a different proxy, spreading
+    // the burst across the whole pool.
+    let proxyOffset = 0;
+
     async function fetchViaProxy(targetUrl, validate) {
         const failures = [];
-        for (let i = 0; i < PROXIES.length; i++) {
+        const start = proxyOffset++ % PROXIES.length;
+        for (let step = 0; step < PROXIES.length; step++) {
             if (cancelRequested) throw new Error('CANCELLED');
-            const p = PROXIES[i];
+            const p = PROXIES[(start + step) % PROXIES.length];
             const ctrl = new AbortController();
             const timer = setTimeout(function () { ctrl.abort(); }, PROXY_TIMEOUT_MS);
             try {
@@ -336,6 +351,19 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
             }
         }
         throw new Error('ALL PROXIES FAILED [' + failures.join(' | ') + ']');
+    }
+
+    // One-shot retry around a flaky fetch. The whole proxy chain went
+    // down sometimes simply because three proxies were rate-limited at
+    // the same moment; waiting a couple seconds usually clears it.
+    async function fetchWithRetry(fn) {
+        try { return await fn(); }
+        catch (e) {
+            if (cancelRequested) throw e;
+            await delay(RETRY_DELAY_MS);
+            if (cancelRequested) throw new Error('CANCELLED');
+            return await fn();
+        }
     }
 
     function parseRSS(xml) {
@@ -378,16 +406,27 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
         );
         const posterMatch = html.match(/property="og:image"\s+content="([^"]+)"/);
         const runtimeMatch = html.match(/(\d+)\s*&nbsp;mins/) || html.match(/(\d+)\s*mins?\b/);
+        const summaryMatch = html.match(/property="og:description"\s+content="([^"]+)"/);
+        const directorMatch = html.match(/twitter:label1"\s+content="Directed by"[^>]*>\s*<meta\s+name="twitter:data1"\s+content="([^"]+)"/)
+            || html.match(/href="\/director\/[^"]+\/"\s+class="text-slug">([^<]+)</);
+        // Letterboxd's JSON-LD carries the aggregate rating cleanly.
+        const ratingMatch = html.match(/"ratingValue":\s*([\d.]+)/);
         const genres = [];
         const genreRe = /\/films\/genre\/([a-z-]+)\//g;
         let g;
         while ((g = genreRe.exec(html)) !== null) {
             if (genres.indexOf(g[1]) === -1) genres.push(g[1]);
         }
+        // First country slug — usually the primary production country.
+        const countryMatch = html.match(/\/films\/country\/([a-z-]+)\//);
         return {
             poster: posterMatch ? posterMatch[1] : null,
             runtime: runtimeMatch ? parseInt(runtimeMatch[1], 10) : null,
-            genres: genres
+            genres: genres,
+            director: directorMatch ? directorMatch[1].trim() : null,
+            country: countryMatch ? countryMatch[1] : null,
+            rating: ratingMatch ? parseFloat(ratingMatch[1]) : null,
+            summary: summaryMatch ? summaryMatch[1].replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"') : null
         };
     }
 
@@ -551,7 +590,9 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
                 }
                 return Object.assign({}, f);
             });
-            const isEnriched = function (entry) { return entry.runtime != null && entry.poster && entry.genres && entry.genres.length; };
+            // Require the new MovieCard fields too — older caches missing
+            // summary/director will re-enrich on next sync.
+            const isEnriched = function (entry) { return entry.runtime != null && entry.poster && entry.genres && entry.genres.length && entry.summary != null; };
             const indicesToFetch = enriched.map(function (e, i) { return isEnriched(e) ? -1 : i; }).filter(function (i) { return i !== -1; });
             const skipped = allFilms.length - indicesToFetch.length;
             if (skipped > 0) appendLog('SKIPPING ' + skipped + ' ALREADY-ENRICHED FILMS FROM CACHE.', 'text-on-surface-variant');
@@ -567,7 +608,7 @@ A:\&gt; SYNC_TOOL.EXE /TARGET=LETTERBOXD
                     const film = allFilms[i];
                     setProgressPanel({ current: film.title.toUpperCase() });
                     try {
-                        const detail = await fetchFilmDetail(film.slug);
+                        const detail = await fetchWithRetry(function () { return fetchFilmDetail(film.slug); });
                         enriched[i] = Object.assign({}, film, detail);
                         okCount++;
                     } catch (e) {
